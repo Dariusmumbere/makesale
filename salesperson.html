@@ -9,6 +9,41 @@
       margin-bottom: 15px;
       color: white;
     }
+    /* Chat Interface Styles */
+#chatMessages {
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 #e5e7eb;
+}
+
+#chatMessages::-webkit-scrollbar {
+  width: 6px;
+}
+
+#chatMessages::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 3px;
+}
+
+#chatMessages::-webkit-scrollbar-thumb {
+  background-color: #3b82f6;
+  border-radius: 3px;
+}
+
+.dark #chatMessages::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.dark #chatMessages::-webkit-scrollbar-thumb {
+  background-color: #1e40af;
+}
+
+#chatIcon {
+  transition: all 0.3s ease;
+}
+
+#chatIcon:hover {
+  transform: scale(1.1);
+}
     /* Notification dropdown container */
 .notification-dropdown {
   position: relative;
@@ -1176,5 +1211,141 @@ async function deleteSale(saleId) {
     fetchSalesHistory();
     resetDailySales();
   </script>
+  <!-- Chat Interface -->
+<div id="chatContainer" class="fixed bottom-4 right-4 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-50 hidden">
+  <div class="flex justify-between items-center bg-blue-600 text-white p-3 rounded-t-lg">
+    <h3 class="font-semibold">Team Chat</h3>
+    <button id="closeChat" class="text-white hover:text-gray-200">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <div id="chatMessages" class="p-3 h-64 overflow-y-auto">
+    <!-- Messages will appear here -->
+  </div>
+  <div class="p-3 border-t border-gray-200 dark:border-gray-700">
+    <div class="flex">
+      <input id="chatInput" type="text" placeholder="Type your message..." 
+             class="flex-grow p-2 border rounded-l-lg dark:bg-gray-700 dark:text-white focus:outline-none">
+      <button id="sendMessage" class="bg-blue-600 text-white px-4 py-2 rounded-r-lg hover:bg-blue-700">
+        <i class="fas fa-paper-plane"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Chat Icon -->
+<div id="chatIcon" class="fixed bottom-4 right-4 bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:bg-blue-700 z-40">
+  <i class="fas fa-comment-dots text-xl"></i>
+  <span id="unreadCount" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center hidden">0</span>
+</div>
+
+<script>
+  // WebSocket connection
+  let socket;
+  let unreadMessages = 0;
+  const currentUser = location.pathname.includes('management') ? 'management' : 'salesperson';
+  
+  // Connect to WebSocket
+  function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsUrl = protocol + window.location.host + '/ws/' + currentUser;
+    
+    socket = new WebSocket(wsUrl);
+    
+    socket.onopen = function(e) {
+      console.log("WebSocket connection established");
+    };
+    
+    socket.onmessage = function(event) {
+      const message = event.data;
+      addMessageToChat(message, false);
+      
+      // If chat is closed, increment unread count
+      if (document.getElementById('chatContainer').classList.contains('hidden')) {
+        unreadMessages++;
+        updateUnreadCount();
+      }
+    };
+    
+    socket.onclose = function(event) {
+      if (event.wasClean) {
+        console.log(`WebSocket connection closed cleanly, code=${event.code}, reason=${event.reason}`);
+      } else {
+        console.log('WebSocket connection died');
+        // Try to reconnect after 5 seconds
+        setTimeout(connectWebSocket, 5000);
+      }
+    };
+    
+    socket.onerror = function(error) {
+      console.log(`WebSocket error: ${error.message}`);
+    };
+  }
+  
+  // Add message to chat UI
+  function addMessageToChat(message, isOwnMessage) {
+    const chatMessages = document.getElementById('chatMessages');
+    const messageElement = document.createElement('div');
+    messageElement.className = `mb-2 p-2 rounded-lg ${isOwnMessage ? 'bg-blue-100 dark:bg-blue-900 ml-8' : 'bg-gray-100 dark:bg-gray-700 mr-8'}`;
+    messageElement.textContent = message;
+    chatMessages.appendChild(messageElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+  
+  // Update unread message count
+  function updateUnreadCount() {
+    const unreadCountElement = document.getElementById('unreadCount');
+    if (unreadMessages > 0) {
+      unreadCountElement.textContent = unreadMessages;
+      unreadCountElement.classList.remove('hidden');
+    } else {
+      unreadCountElement.classList.add('hidden');
+    }
+  }
+  
+  // Send message
+  function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const message = input.value.trim();
+    
+    if (message && socket.readyState === WebSocket.OPEN) {
+      socket.send(message);
+      addMessageToChat(`You: ${message}`, true);
+      input.value = '';
+    }
+  }
+  
+  // Toggle chat visibility
+  function toggleChat() {
+    const chatContainer = document.getElementById('chatContainer');
+    if (chatContainer.classList.contains('hidden')) {
+      chatContainer.classList.remove('hidden');
+      unreadMessages = 0;
+      updateUnreadCount();
+    } else {
+      chatContainer.classList.add('hidden');
+    }
+  }
+  
+  // Event listeners
+  document.addEventListener('DOMContentLoaded', () => {
+    connectWebSocket();
+    
+    document.getElementById('chatIcon').addEventListener('click', toggleChat);
+    document.getElementById('closeChat').addEventListener('click', toggleChat);
+    document.getElementById('sendMessage').addEventListener('click', sendMessage);
+    
+    document.getElementById('chatInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+    
+    // Add welcome message
+    setTimeout(() => {
+      addMessageToChat(`You are connected as ${currentUser}. Start chatting!`, false);
+    }, 1000);
+  });
+</script>
 </body>
 </html>
